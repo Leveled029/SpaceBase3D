@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Space Base Program</title>
+    <!-- Tailwind CSS for styling the UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js Library for the 3D background -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        /* --- Merged and optimized styles from both files --- */
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #0d1117; /* Dark space background fallback */
+            width: 100vw; /* Ensure body takes full width */
+            height: 100vh; /* Ensure body takes full height */
+            position: relative; /* For absolute positioning of UI overlay */
+            color: #e0e6ec; /* Default text color for UI elements */
+            font-family: 'Inter', sans-serif;
+        }
+        canvas {
+            display: block;
+            background-color: #000;
+            width: 100vw; /* Full viewport width */
+            height: 100vh; /* Full viewport height */
+        }
+        /* UI Overlay to ensure UI is visible and interactive on top of the canvas */
+        .ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10; /* Ensure UI is above the canvas */
+            pointer-events: none; /* Allow mouse events to pass through to the canvas below */
+        }
+        /* All elements within the overlay should be interactive by default */
+        .ui-element {
+            pointer-events: auto; /* Re-enable pointer events for interactive UI elements */
+        }
+
+        /* Specific styles for notification dropdown (re-using some original concepts with yellow theme) */
+        .notification-dropdown {
+            position: absolute;
+            top: 60px; /* Position below the notifications bar */
+            right: 0px; /* Align with the right side of the notification bar */
+            background-color: rgba(33, 38, 45, 0.95); /* Darker semi-transparent background */
+            border: 1px solid rgba(255, 204, 0, 0.5); /* Yellow border */
+            border-radius: 8px;
+            padding: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            width: 300px;
+            max-height: 400px;
+            overflow-y: auto;
+            z-index: 10;
+            display: none; /* Hidden by default */
+            flex-direction: column;
+            gap: 8px;
+        }
+        .notification-dropdown.show {
+            display: flex;
+        }
+        .notification-item {
+            background-color: rgba(0, 0, 0, 0.3);
+            padding: 8px;
+            border-radius: 5px;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .notification-item.unread {
+            border: 1px solid #ffcc00; /* Yellow border for unread */
+        }
+        .notification-item h4 {
+            font-weight: bold;
+            color: #ffcc00; /* Yellow title */
+            margin: 0;
+            font-size: 0.95rem;
+        }
+        .notification-item p {
+            font-size: 0.85rem;
+            color: #c9d1d9;
+            margin: 0;
+        }
+        .notification-item .close-btn {
+            background: none;
+            border: none;
+            color: #8b949e;
+            font-size: 0.8rem;
+            cursor: pointer;
+            align-self: flex-end;
+            margin-top: 5px;
+            padding: 2px 5px;
+            border-radius: 3px;
+            transition: background-color 0.2s;
+        }
+        .notification-item .close-btn:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        .clear-notifications-btn {
+            background-color: #ffcc00; /* Yellow button */
+            color: #1a202c; /* Dark text for yellow button */
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            border: none;
+            font-size: 0.9rem;
+            margin-top: 10px;
+        }
+        .clear-notifications-btn:hover {
+            background-color: #e6b800; /* Darker yellow on hover */
+        }
+        /* Styles for the time control buttons (pause, play, fast forward) */
+        .time-btn {
+            font-size: 1rem; /* Adjusted font size for icons */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .time-btn.active {
+            background-color: #ffcc00; /* Yellow when active */
+            color: #1a202c; /* Dark text for active yellow */
+        }
+        .time-btn:not(.active) {
+            background-color: #4b5563; /* Gray when inactive */
+            color: #e0e6ec; /* Light text for inactive gray */
+        }
+        .time-btn:hover:not(.active) {
+            background-color: #6b7280; /* Darker gray on hover for inactive */
+        }
+    </style>
+</head>
+<body>
+    <!-- 3D Canvas for the background -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- The main UI overlay, positioned on top of the canvas -->
+    <div class="ui-overlay">
+        <!-- Left-side Button Container -->
+        <div class="top-left-buttons ui-element absolute top-5 left-5 flex flex-col gap-2">
+            <!-- Button 1: View/Target Icon -->
+            <button id="viewButton" class="w-16 h-16 bg-gray-800 bg-opacity-70 border border-transparent hover:border-yellow-400 hover:bg-opacity-80 text-yellow-400 rounded-lg shadow-lg flex items-center justify-center font-bold text-xl transition-all duration-150 ease-in-out">
+                <!-- Lucide Target Icon -->
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-target"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+            </button>
+            <!-- Button 2: Population/Crew Icon -->
+            <button id="populationButton" class="w-16 h-16 bg-gray-800 bg-opacity-70 border border-transparent hover:border-yellow-400 hover:bg-opacity-80 text-yellow-400 rounded-lg shadow-lg flex items-center justify-center font-bold text-xl transition-all duration-150 ease-in-out">
+                <!-- Lucide User Icon -->
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-user"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            </button>
+            <!-- Button 3: Build/Structure Icon -->
+            <button id="buildButton" class="w-16 h-16 bg-gray-800 bg-opacity-70 border border-transparent hover:border-yellow-400 hover:bg-opacity-80 text-yellow-400 rounded-lg shadow-lg flex items-center justify-center font-bold text-xl transition-all duration-150 ease-in-out">
+                <!-- Custom SVG for an isometric outlined cube -->
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                    <polyline points="3.26 7.39 12 12.01 20.74 7.39"/>
+                    <polyline points="12 21.61 12 12.01"/>
+                </svg>
+            </button>
+            <!-- Button 4: Mining/Resources Icon -->
+            <button id="mineButton" class="w-16 h-16 bg-gray-800 bg-opacity-70 border border-transparent hover:border-yellow-400 hover:bg-opacity-80 text-yellow-400 rounded-lg shadow-lg flex items-center justify-center font-bold text-xl transition-all duration-150 ease-in-out">
+                <!-- Custom SVG for a hexagonal mining symbol -->
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <!-- Hexagon outline -->
+                    <path d="M21 16.5V7.5L14 3.5L7 7.5V16.5L14 20.5L21 16.5Z"/>
+                    <!-- Inner line (laser/drill) -->
+                    <line x1="12" y1="12" x2="19" y2="12"/>
+                    <!-- Small circle in center -->
+                    <circle cx="12" cy="12" r="2"/>
+                </svg>
+            </button>
+            <!-- Button 5: Beacon/Signal Icon -->
+            <button id="beaconButton" class="w-16 h-16 bg-gray-800 bg-opacity-70 border border-transparent hover:border-yellow-400 hover:bg-opacity-80 text-yellow-400 rounded-lg shadow-lg flex items-center justify-center font-bold text-xl transition-all duration-150 ease-in-out">
+                <!-- Custom SVG for a beacon/wifi icon -->
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M5 12s2-4 7-4 7 4 7 4M12 20v-8M18.36 17.36l-1.42-1.42M5.64 17.36l1.42-1.42"/>
+                    <circle cx="12" cy="12" r="1"/>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Right-side UI -->
+        <div class="right-side-ui ui-element absolute top-5 right-5 flex flex-col items-end gap-4">
+            <!-- Top Row: Matter and Population Capacity -->
+            <div class="flex flex-row gap-4">
+                <!-- Resource Display: Matter -->
+                <div class="resource-display p-3 flex items-center gap-3">
+                    <div class="resource-icon bg-yellow-400 text-gray-900 w-8 h-8 rounded-full flex items-center justify-center font-bold">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-gem"><path d="M6 3v18l6-4 6 4V3l-6 4Z"/></svg>
+                    </div>
+                    <span class="text-xl font-semibold text-yellow-300" id="matterValue">7459</span>
+                    <span class="text-sm text-gray-400">Matter</span>
+                </div>
+
+                <!-- Resource Display: Population Capacity -->
+                <div class="resource-display p-3 flex items-center gap-3">
+                    <div class="resource-icon bg-yellow-400 text-gray-900 w-8 h-8 rounded-full flex items-center justify-center font-bold">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-users"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87L16 14a4 4 0 0 0-1 3.87v2"/><path d="M19 7c1.43 0 2.7.35 3.5 1"/></svg>
+                    </div>
+                    <span class="text-xl font-semibold text-yellow-300" id="populationValue">19/36</span>
+                    <span class="text-sm text-gray-400">Capacity</span>
+                </div>
+            </div>
+
+            <!-- Time Controls -->
+            <div class="time-controls ui-element bg-gray-800 bg-opacity-70 border border-transparent hover:border-yellow-400 p-2 rounded-lg shadow-lg flex items-center gap-3 transition-all duration-150 ease-in-out">
+                <span class="text-sm text-gray-400">Spacedate</span>
+                <span class="text-yellow-300 font-semibold" id="spacedateValue">9103.22</span>
+                <button id="pauseButton" class="time-btn w-8 h-8 rounded-full flex items-center justify-center text-base transition-colors duration-150 ease-in-out">&#9646;&#9646;</button>
+                <button id="playButton" class="time-btn w-8 h-8 rounded-full flex items-center justify-center text-base transition-colors duration-150 ease-in-out active">&#9658;</button>
+                <button id="fastForwardButton" class="time-btn w-8 h-8 rounded-full flex items-center justify-center text-base transition-colors duration-150 ease-in-out">&#9658;&#9658;</button>
+            </div>
+
+            <!-- Notification Bar & Dropdown -->
+            <div class="resource-bar ui-element bg-gray-800 bg-opacity-70 border border-transparent hover:border-yellow-400 p-3 rounded-lg shadow-lg flex items-center gap-3 transition-all duration-150 ease-in-out relative" id="notificationsBar">
+                <div class="resource-icon bg-yellow-400 text-gray-900 w-8 h-8 rounded-full flex items-center justify-center font-bold">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bell"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                </div>
+                <span class="text-xl font-semibold text-yellow-300" id="notificationsValue">0</span>
+                <span class="text-sm text-gray-400">Alerts</span>
+
+                <div class="notification-dropdown ui-element" id="notificationDropdown">
+                    <p class="text-yellow-400 font-bold mb-2">Notifications</p>
+                    <div id="notificationList" class="flex flex-col gap-2">
+                        <!-- Notification items will be injected here -->
+                    </div>
+                    <button class="clear-notifications-btn" id="clearNotificationsButton">Clear All</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // --- Merged Global Variables for Three.js Scene and Game State ---
+        let scene, camera, renderer;
+        // Track pressed keys for WASD movement
+        let keys = { w: false, a: false, s: false, d: false };
+        
+        // Camera Orbit Controls variables
+        let cameraTarget = new THREE.Vector3(0, 0, 0); // The point the camera looks at
+        let cameraRadius = 150; // Distance from the target
+        let cameraPhi = Math.PI / 3;    // Polar angle (from Y-axis, 0 = top, PI = bottom)
+        let cameraTheta = Math.PI / 4;  // Azimuthal angle (around Y-axis, from +X axis)
+        const minCameraRadius = 40; 
+        const maxCameraRadius = 300;
+        const orbitSpeed = 0.005; // Sensitivity for camera rotation
+        const cameraMoveSpeed = 0.5; // Speed for WASD movement
+        let isRightClickDragging = false;
+        let lastMouseX = 0;
+        let lastMouseY = 0;
+
+        const planeHalfSize = 300; 
+        let raycaster = new THREE.Raycaster();
+        let mouse = new THREE.Vector2();
+
+        // Global variables for starfield
+        let starfieldContainer; // A group to hold all stars
+        const starCount = 12500; 
+        let starfieldMaxRadius; 
+
+        // Planet variables
+        let planet;
+        const planetRadius = 1500; // Very large radius for the single planet
+        const planetDistance = 8000; // Fixed distance for the planet
+        const planetYOffset = -500; // Offset for the planet to appear below the plane
+
+        // Game State (Simplified for UI only)
+        const gameState = {
+            resources: {
+                matter: 7459,
+            },
+            stats: {
+                population: 19,
+                totalPopulationCapacity: 36
+            },
+            gameSpeedMultiplier: 1, // 0 = paused, 1 = normal, 2 = fast forward
+            messageLog: [], // Stores messages for notifications
+        };
+        let lastFrameTime = 0; // For simulating time progression
+
+        // --- UI Element References ---
+        // Left Side Buttons
+        const viewButton = document.getElementById('viewButton');
+        const populationButton = document.getElementById('populationButton');
+        const buildButton = document.getElementById('buildButton');
+        const mineButton = document.getElementById('mineButton');
+        const beaconButton = document.getElementById('beaconButton');
+
+        // Right Side UI Elements
+        const matterValueEl = document.getElementById('matterValue');
+        const populationValueEl = document.getElementById('populationValue');
+        const spacedateValueEl = document.getElementById('spacedateValue');
+        const pauseButton = document.getElementById('pauseButton');
+        const playButton = document.getElementById('playButton');
+        const fastForwardButton = document.getElementById('fastForwardButton');
+        const notificationsBar = document.getElementById('notificationsBar');
+        const notificationsValueEl = document.getElementById('notificationsValue');
+        const notificationDropdown = document.getElementById('notificationDropdown');
+        const notificationList = document.getElementById('notificationList');
+        const clearNotificationsButton = document.getElementById('clearNotificationsButton');
+
+        // --- Core Three.js Scene Setup Functions ---
+        function initThreeJS() {
+            try {
+                // Scene setup
+                scene = new THREE.Scene();
+                // Add a simple ambient light to make objects visible
+                const ambientLight = new THREE.AmbientLight(0x404040, 2);
+                scene.add(ambientLight);
+
+                // Add a directional light
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+                directionalLight.position.set(50, 50, 50);
+                directionalLight.castShadow = true;
+                scene.add(directionalLight);
+
+                // Camera setup
+                // Increased far clipping plane to ensure distant planets and stars are visible
+                camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 20000); 
+                camera.position.set(0, 100, 150); // Start position
+                camera.lookAt(cameraTarget);
+
+                // Renderer setup
+                const canvas = document.getElementById('gameCanvas');
+                renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setClearColor(0x0d1117);
+
+                // Create a ground plane for reference
+                const planeGeometry = new THREE.PlaneGeometry(planeHalfSize * 2, planeHalfSize * 2);
+                // Made the plane transparent
+                const planeMaterial = new THREE.MeshPhongMaterial({ color: 0x222222, side: THREE.DoubleSide, transparent: true, opacity: 0.2 });
+                const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+                plane.rotation.x = Math.PI / 2;
+                scene.add(plane);
+
+                // Create the single large planet first
+                createPlanet();
+
+                // Set starfield max radius to be beyond the planet's furthest point
+                // Planet's furthest point from origin will be planetDistance + planetRadius
+                starfieldMaxRadius = planetDistance + planetRadius + 1000; 
+                
+                // Create starfield (fixed at origin)
+                createStarfield();
+
+                // Call the resize function once to set the initial size
+                onWindowResize();
+
+                // Mouse and keyboard event listeners for 3D controls
+                window.addEventListener('resize', onWindowResize, false);
+                canvas.addEventListener('mousedown', onMouseDown);
+                canvas.addEventListener('mousemove', onMouseMove);
+                canvas.addEventListener('mouseup', onMouseUp);
+                canvas.addEventListener('wheel', onWheel);
+                window.addEventListener('keydown', onKeyDown);
+                window.addEventListener('keyup', onKeyUp);
+                canvas.addEventListener('contextmenu', (e) => e.preventDefault()); // Prevent default right-click menu
+
+            } catch (e) {
+                console.error("Game Initialization Error:", e);
+                alert("The game failed to load properly. Check the console for details.");
+            }
+        }
+
+        // Handles window resize to update camera aspect ratio and renderer size
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // WASD control event listeners
+        function onKeyDown(event) {
+            switch (event.code) {
+                case 'KeyW': keys.w = true; break;
+                case 'KeyA': keys.a = true; break;
+                case 'KeyS': keys.s = true; break;
+                case 'KeyD': keys.d = true; break;
+            }
+        }
+        function onKeyUp(event) {
+            switch (event.code) {
+                case 'KeyW': keys.w = false; break;
+                case 'KeyA': keys.a = false; break;
+                case 'KeyS': keys.s = false; break;
+                case 'KeyD': keys.d = false; break;
+            }
+        }
+
+        // Mouse orbit controls event listeners
+        function onMouseDown(event) {
+            if (event.button === 2) { // Right mouse button
+                isRightClickDragging = true;
+                lastMouseX = event.clientX;
+                lastMouseY = event.clientY;
+            }
+        }
+        function onMouseMove(event) {
+            if (isRightClickDragging) {
+                const deltaX = event.clientX - lastMouseX;
+                const deltaY = event.clientY - lastMouseY;
+                lastMouseX = event.clientX;
+                lastMouseY = event.clientY;
+
+                // Adjust cameraTheta (horizontal rotation)
+                cameraTheta -= deltaX * orbitSpeed;
+                // Adjust cameraPhi (vertical rotation), clamp to avoid Gimbal lock
+                cameraPhi -= deltaY * orbitSpeed;
+                // Clamped to prevent viewing the underside of the plane
+                cameraPhi = Math.max(0.01, Math.min(Math.PI / 2 - 0.05, cameraPhi));
+            }
+        }
+        function onMouseUp(event) {
+            if (event.button === 2) { // Right mouse button
+                isRightClickDragging = false;
+            }
+        }
+
+        // Mouse wheel for zooming
+        function onWheel(event) {
+            // Invert scroll wheel
+            cameraRadius += event.deltaY * 0.1;
+            cameraRadius = Math.max(minCameraRadius, Math.min(maxCameraRadius, cameraRadius));
+        }
+        
+        // Updates the camera's position based on orbit variables
+        function updateCameraOrbit() {
+            camera.position.x = cameraTarget.x + cameraRadius * Math.sin(cameraPhi) * Math.sin(cameraTheta);
+            camera.position.y = cameraTarget.y + cameraRadius * Math.cos(cameraPhi);
+            camera.position.z = cameraTarget.z + cameraRadius * Math.sin(cameraPhi) * Math.cos(cameraTheta);
+            camera.lookAt(cameraTarget);
+        }
+        
+        // Updates the camera's target position based on WASD input
+        function updateCameraPosition() {
+            const forward = new THREE.Vector3();
+            camera.getWorldDirection(forward);
+            forward.y = 0; // Keep movement on the XZ plane
+            forward.normalize();
+
+            const right = new THREE.Vector3().crossVectors(camera.up, forward).normalize();
+
+            if (keys.w) cameraTarget.addScaledVector(forward, cameraMoveSpeed);
+            if (keys.s) cameraTarget.addScaledVector(forward, -cameraMoveSpeed);
+            // Invert A and D keys
+            if (keys.a) cameraTarget.addScaledVector(right, cameraMoveSpeed);
+            if (keys.d) cameraTarget.addScaledVector(right, -cameraMoveSpeed);
+        }
+
+        // Function to create a starfield (fixed at origin)
+        function createStarfield() {
+            starfieldContainer = new THREE.Group();
+            scene.add(starfieldContainer);
+
+            const starVertices = [];
+            for (let i = 0; i < starCount; i++) {
+                // Distribute stars within a sphere of starfieldMaxRadius centered at (0,0,0)
+                const radius = THREE.MathUtils.randFloat(starfieldMaxRadius - 100, starfieldMaxRadius); // Generate near the outer edge
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.random() * Math.PI;
+
+                starVertices.push(
+                    radius * Math.sin(phi) * Math.cos(theta),
+                    radius * Math.cos(phi),
+                    radius * Math.sin(phi) * Math.sin(theta)
+                );
+            }
+            const starGeometry = new THREE.BufferGeometry();
+            starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+            const starMaterial = new THREE.PointsMaterial({ color: 0x888888, size: 0.7 });
+            starfieldContainer.add(new THREE.Points(starGeometry, starMaterial));
+        }
+
+        // Function to create a single large 3D planet in the background
+        function createPlanet() {
+            const planetGeometry = new THREE.SphereGeometry(planetRadius, 64, 64);
+            
+            // Generate a random, distinct color for the planet
+            const randomColor = new THREE.Color(Math.random(), Math.random(), Math.random());
+            const planetMaterial = new THREE.MeshPhongMaterial({ color: randomColor });
+            
+            planet = new THREE.Mesh(planetGeometry, planetMaterial);
+            
+            // Position the planet far back and slightly below the main plane
+            // The Z position is negative to place it behind the camera's initial view
+            planet.position.set(0, planetYOffset, -planetDistance); 
+            scene.add(planet);
+        }
+
+        // --- UI Initialization and Functions ---
+        function initUI() {
+            // Attach UI Event Listeners
+            pauseButton.addEventListener('click', () => setGameSpeed(0));
+            playButton.addEventListener('click', () => setGameSpeed(1));
+            fastForwardButton.addEventListener('click', () => setGameSpeed(2));
+            notificationsBar.addEventListener('click', toggleNotificationDropdown);
+            clearNotificationsButton.addEventListener('click', clearAllNotifications);
+            
+            // Hide dropdown if clicked outside
+            document.addEventListener('click', (event) => {
+                // Ensure clicks inside the notifications bar or dropdown itself don't close it
+                if (!event.target.closest('#notificationsBar') && notificationDropdown.classList.contains('show')) {
+                    notificationDropdown.classList.remove('show');
+                }
+            });
+
+            // Add an initial notification for demonstration
+            showNotification("Welcome!", "Your Space Base UI is now running!");
+        }
+
+        /**
+         * Updates the displayed values in the UI elements.
+         */
+        function updateUI() {
+            matterValueEl.textContent = Math.floor(gameState.resources.matter);
+            populationValueEl.textContent = `${gameState.stats.population}/${gameState.stats.totalPopulationCapacity}`;
+            
+            // For spacedate, get current date
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = (now.getMonth() + 1).toString().padStart(2, '0');
+            const day = now.getDate().toString().padStart(2, '0');
+            spacedateValueEl.textContent = `${year}.${month}.${day}`;
+
+            // Update notification count and display
+            notificationsValueEl.textContent = gameState.messageLog.filter(m => !m.read).length;
+            renderNotifications();
+
+            // Update time control button active state
+            pauseButton.classList.toggle('active', gameState.gameSpeedMultiplier === 0);
+            playButton.classList.toggle('active', gameState.gameSpeedMultiplier === 1);
+            fastForwardButton.classList.toggle('active', gameState.gameSpeedMultiplier === 2);
+        }
+
+        /**
+         * Sets the game speed multiplier and updates the UI.
+         * @param {number} multiplier - The new game speed multiplier (0: paused, 1: normal, 2: fast-forward).
+         */
+        function setGameSpeed(multiplier) {
+            gameState.gameSpeedMultiplier = multiplier;
+            updateUI();
+        }
+
+        /**
+         * Adds a message to the notification log and updates the UI.
+         * @param {string} title - The title of the message.
+         * @param {string} content - The content of the message.
+         */
+        function showNotification(title, content) {
+            gameState.messageLog.unshift({ id: Date.now(), title, content, read: false });
+            updateUI();
+        }
+
+        /**
+         * Toggles the visibility of the notification dropdown.
+         */
+        function toggleNotificationDropdown(event) {
+            // Stop propagation to prevent document click listener from immediately closing it
+            event.stopPropagation();
+            notificationDropdown.classList.toggle('show');
+            // Mark all current notifications as read when the dropdown is opened
+            gameState.messageLog.forEach(msg => msg.read = true);
+            updateUI(); // Re-render to update unread count
+        }
+
+        /**
+         * Renders the list of notifications in the dropdown.
+         */
+        function renderNotifications() {
+            notificationList.innerHTML = ''; // Clear existing notifications
+            if (gameState.messageLog.length === 0) {
+                notificationList.innerHTML = '<p class="text-gray-500 text-center py-4">No new notifications.</p>';
+            } else {
+                gameState.messageLog.forEach((msg) => {
+                    const notificationItem = document.createElement('div');
+                    notificationItem.classList.add('notification-item');
+                    if (!msg.read) {
+                        notificationItem.classList.add('unread');
+                    }
+                    notificationItem.innerHTML = `
+                        <h4>${msg.title}</h4>
+                        <p>${msg.content}</p>
+                        <button class="close-btn" data-id="${msg.id}">Dismiss</button>
+                    `;
+                    notificationList.appendChild(notificationItem);
+
+                    // Add event listener to dismiss button
+                    notificationItem.querySelector('.close-btn').addEventListener('click', (event) => {
+                        event.stopPropagation(); // Prevent closing dropdown when dismissing
+                        const idToDismiss = parseInt(event.target.dataset.id);
+                        dismissNotification(idToDismiss);
+                    });
+                });
+            }
+        }
+
+        /**
+         * Dismisses a specific notification by its ID.
+         * @param {number} id - The ID of the notification to dismiss.
+         */
+        function dismissNotification(id) {
+            gameState.messageLog = gameState.messageLog.filter(msg => msg.id !== id);
+            updateUI(); // Update UI after dismissal
+        }
+
+        /**
+         * Clears all notifications from the log.
+         */
+        function clearAllNotifications() {
+            gameState.messageLog = [];
+            updateUI(); // Update UI after clearing
+        }
+
+        // --- Main Animation Loop (combines 3D rendering and UI logic) ---
+        function animate(currentTime) {
+            requestAnimationFrame(animate);
+            const deltaTime = (currentTime - lastFrameTime) / 1000; // Time elapsed since last frame in seconds
+            lastFrameTime = currentTime;
+
+            // Simulate game logic progression if not paused
+            if (gameState.gameSpeedMultiplier > 0) {
+                // Simulate resource changes
+                gameState.resources.matter += (1 * gameState.gameSpeedMultiplier * deltaTime);
+                
+                // Simulate new notification every X seconds (simulated)
+                // Adjust frequency as desired
+                if (Math.random() < 0.005 * gameState.gameSpeedMultiplier) { 
+                    showNotification("System Update", "New discovery: Uncharted asteroid field detected!");
+                }
+            }
+            
+            // Update 3D camera position and orbit
+            updateCameraPosition();
+            updateCameraOrbit();
+
+            // Update UI elements to reflect state changes
+            updateUI();
+
+            // Render the 3D scene
+            renderer.render(scene, camera);
+        }
+        
+        // Ensures both the 3D scene and the UI are initialized after the DOM is fully loaded
+        window.onload = function () {
+            initThreeJS();
+            initUI();
+            updateUI(); // Perform an initial UI update to display correct values
+            animate(performance.now()); // Start the main animation loop
+        };
+    </script>
+</body>
+</html>
